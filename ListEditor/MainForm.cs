@@ -34,13 +34,14 @@ namespace ListEditor
                 var result = MessageBox.Show("Do you want to save changes?", "List Editor", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
                 if (result == DialogResult.Yes)
                 {
-                    Save();
+                    Save(fileName);
                 }
                 else if (result == DialogResult.Cancel)
                 {
                     return;
                 }
             }
+
             using (OpenFileDialog openFileDialog = new OpenFileDialog())
             {
                 openFileDialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
@@ -50,97 +51,145 @@ namespace ListEditor
 
                 if (openFileDialog.ShowDialog() == DialogResult.OK)
                 {
+                    isSaved = true;
                     dgvBookList.Rows.Clear();
                     fileName = openFileDialog.FileName;
-                    string[] lines = File.ReadAllLines(fileName);
-                    for (int i = 0; i < lines.Length; i++)
+
+                    try
                     {
-                        dgvBookList.Rows.Add();
-                        string[] line = lines[i].Split(',').Select(s => s.Trim()).ToArray();
-                        for (int j = 0; j < line.Length; j++)
+                        string[] lines = File.ReadAllLines(fileName);
+                        for (int i = 0; i < lines.Length; i++)
                         {
-                            var stringValue = line[j];
-                            var cell = dgvBookList[j, i];
+                            dgvBookList.Rows.Add();
+                            string[] line = lines[i].Split(',').Select(s => s.Trim()).ToArray();
+                            if (line.Length != 5)
+                            {
+                                throw new Exception("Invalid field count");
+                            }
+
+                            for (int j = 0; j < line.Length; j++)
+                            {
+                                var stringValue = line[j];
+                                var cell = dgvBookList[j, i];
+                                switch (j)
+                                {
+                                    case 2:
+                                    case 3:
+                                        cell.Value = (stringValue == string.Empty) ? (int?)null : int.Parse(stringValue);
+                                        break;
+                                    case 4:
+                                        cell.Value = (stringValue == string.Empty) ? (double?)null : double.Parse(stringValue, CultureInfo.InvariantCulture);
+                                        break;
+                                    default:
+                                        cell.Value = stringValue;
+                                        break;
+                                }
+                            }
+                        }
+                    }
+                    catch(Exception)
+                    {
+                        dgvBookList.Rows.Clear();
+                        MessageBox.Show("Invalid file format", "Bad file", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+
+
+
+                }
+            }
+        }
+
+        private void Save(string destinationFile)
+        {
+            if(string.IsNullOrEmpty(destinationFile))
+            {
+                using (SaveFileDialog saveFileDialog = new SaveFileDialog())
+                {
+                    saveFileDialog.Filter = "csv files (*.csv)|*.csv|All files (*.*)|*.*";
+                    if (saveFileDialog.ShowDialog() == DialogResult.OK)
+                    {
+                        destinationFile = saveFileDialog.FileName;
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(destinationFile))
+            {
+                fileName = destinationFile;
+
+                List<string> lines = new List<string>();
+
+                for (int i = 0; i < dgvBookList.RowCount - 1; i++)
+                {
+                    var line = string.Empty;
+
+                    for (int j = 0; j < dgvBookList.Rows[i].Cells.Count; j++)
+                    {
+                        string strValue;
+
+                        var cell = dgvBookList[j, i];
+
+                        if (cell.Value == null || cell.Value is string && string.Empty == ((string)cell.Value))
+                        {
+                            strValue = string.Empty;
+                        }
+                        else
+                        {
                             switch (j)
                             {
                                 case 2:
                                 case 3:
-                                    cell.Value = (stringValue == string.Empty) ? (int?)null : int.Parse(stringValue);
+                                    strValue = ((int?)cell.Value)?.ToString() ?? string.Empty;
                                     break;
                                 case 4:
-                                    cell.Value = (stringValue == string.Empty) ? (double?)null : double.Parse(stringValue, CultureInfo.InvariantCulture);
+                                    strValue = ((double?)cell.Value)?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
                                     break;
                                 default:
-                                    cell.Value = stringValue;
+                                    strValue = (string)cell.Value;
                                     break;
                             }
                         }
-                    }
-                }
-            }
-        }
 
-        private void Save()
-        {
-            List<string> lines = new List<string>();
-
-            for (int i = 0; i < dgvBookList.RowCount - 1; i++)
-            {
-                var line = string.Empty;
-
-                for (int j = 0; j < dgvBookList.Rows[i].Cells.Count; j++)
-                {
-                    string strValue;
-
-                    var cell = dgvBookList[j, i];
-
-                    if (cell.Value == null || cell.Value is string && string.Empty == ((string)cell.Value))
-                    {
-                        strValue = string.Empty;
-                    }
-                    else
-                    {
-                        switch (j)
-                        {
-                            case 2:
-                            case 3:
-                                strValue = ((int?)cell.Value)?.ToString() ?? string.Empty;
-                                break;
-                            case 4:
-                                strValue = ((double?)cell.Value)?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
-                                break;
-                            default:
-                                strValue = (string)cell.Value;
-                                break;
-                        }
+                        line = string.Concat(line, (line == string.Empty ? string.Empty : ","), strValue);
                     }
 
-                    line = string.Concat(line, (line == string.Empty ? string.Empty : ","), strValue);
+                    lines.Add(line);
                 }
 
-                lines.Add(line);
-            }
-
-            File.WriteAllLines(fileName, lines);
-            isSaved = true;
+                File.WriteAllLines(fileName, lines);
+                isSaved = true;
+            }   
         }
 
-        private void SaveAs()
-        {
-            using (SaveFileDialog saveFileDialog = new SaveFileDialog())
-            {
-                saveFileDialog.Filter = "csv files (*.csv)|*.csv|All files (*.*)|*.*";
-                if (saveFileDialog.ShowDialog() == DialogResult.OK)
-                {
-                    fileName = saveFileDialog.FileName;
-                    Save();
-                }
-            }
-        }
+       
 
         private void buttonSaveAs_Click(object sender, EventArgs e)
         {
-            SaveAs();
+            Save(string.Empty);
+        }
+
+        private void buttonSave_Click(object sender, EventArgs e)
+        {
+            Save(fileName);
+        }
+
+        private void buttonNew_Click(object sender, EventArgs e)
+        {
+            if (!isSaved)
+            {
+                var result = MessageBox.Show("Do you want to save changes?", "List Editor", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+                if (result == DialogResult.Yes)
+                {
+                    Save(fileName);
+                }
+                else if (result == DialogResult.Cancel)
+                {
+                    return;
+                }
+            }
+
+            dgvBookList.Rows.Clear();
+            isSaved = true;
         }
 
         private void textBoxFilter_TextChanged(object sender, EventArgs e)
@@ -197,7 +246,6 @@ namespace ListEditor
                 isSaved = false;
             }
 
-            Console.WriteLine($"Validating [{e.ColumnIndex},{e.RowIndex}]: {e.FormattedValue}");
         }
 
         private void dgvBookList_CellEndEdit(object sender, DataGridViewCellEventArgs e)
@@ -224,32 +272,9 @@ namespace ListEditor
                     break;
             }
 
-            Console.WriteLine($"Parsing({e.ParsingApplied}) [{e.ColumnIndex},{e.RowIndex}]: {e.Value} {(e.Value == null ? "null" : e.Value.GetType().Name)}");
         }
 
-        private void buttonSave_Click(object sender, EventArgs e)
-        {
-            Save();
-        }
-
-        private void buttonNew_Click(object sender, EventArgs e)
-        {
-            if (!isSaved)
-            {
-                var result = MessageBox.Show("Do you want to save changes?", "List Editor", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
-                if (result == DialogResult.Yes)
-                {
-                    Save();
-                }
-                else if (result == DialogResult.Cancel)
-                {
-                    return;
-                }
-            }
-
-            dgvBookList.Rows.Clear();
-            isSaved = true;
-        }
+        
 
         private void pictureBoxFilter_Click(object sender, EventArgs e)
         {
